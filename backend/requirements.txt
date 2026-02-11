@@ -1,0 +1,10 @@
+#Import Python third-party libraries required for the project
+fastapi             # Backend framework (API service to connect frontend and backend)
+uvicorn[standard]   # ASGI server to run FastAPI app
+python-multipart    # Support for handling file uploads (multipart/form-data)
+pydantic            # Data validation and parsing (define request/response models)
+joblib              # Save/load trained ML models (e.g., .joblib, .pkl files)
+scikit-learn        # Machine learning algorithms and utilities
+numpy               # Numerical computations and data processing
+PyPDF2              # Extract text from PDF files
+python-docx         # Extract text from Word (.docx) files
