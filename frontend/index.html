@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI vs Human Text Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #22d3ee;
+      --danger: #ef4444;
+      --ok: #10b981;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+      background: radial-gradient(1000px 600px at 20% 0%, #0b1223, var(--bg));
+      color: var(--text);
+      min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    }
+    .wrap { width: 100%; max-width: 900px; }
+    .card {
+      background: linear-gradient(180deg, #0b1020, var(--card));
+      border: 1px solid #1f2937; border-radius: 16px; padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    }
+    h1 { margin: 0 0 10px; letter-spacing: .3px; }
+    p.sub { margin: 0 0 16px; color: var(--muted); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab {
+      flex: 0 0 auto; padding: 8px 12px; border: 1px solid #1f2937; border-radius: 999px;
+      background: #0b1223; color: var(--muted); cursor: pointer; user-select: none;
+    }
+    .tab.active { color: var(--text); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(34,211,238,.15) inset; }
+    textarea {
+      width: 100%; min-height: 160px; padding: 12px; border-radius: 12px; border: 1px solid #1f2937;
+      background: #0b1020; color: var(--text); resize: vertical; outline: none;
+    }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+    .filebox {
+      padding: 10px 12px; border: 1px dashed #334155; border-radius: 12px; flex: 1;
+      background: #0b1020; color: var(--muted);
+    }
+    .btn {
+      padding: 10px 14px; border-radius: 12px; border: 1px solid #1f2937;
+      background: linear-gradient(180deg, #0ea5b1, #0891b2); color: #001018;
+      font-weight: 600; cursor: pointer;
+    }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .result {
+      margin-top: 18px; padding: 14px; border-radius: 12px; border: 1px solid #1f2937; background: #0b1020;
+    }
+    .bar {
+      height: 10px; width: 100%; background: #0b1223; border-radius: 999px;
+      overflow: hidden; border: 1px solid #1f2937; margin-top: 10px;
+    }
+    .bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, var(--danger), var(--accent)); }
+    .muted { color: var(--muted); font-size: 14px; }
+    .error { color: var(--danger); font-weight: 600; }
+    .footer { margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>AI vs Human Text Detector</h1>
+      <p class="sub">Paste text or upload a file (.txt, .docx, .pdf). We’ll send it to the backend API and show the result.</p>
+
+      <div class="tabs">
+        <button class="tab active" id="tab-text">Analyze Text</button>
+        <button class="tab" id="tab-file">Upload File</button>
+      </div>
+
+      <!-- TEXT MODE -->
+      <div id="panel-text">
+        <textarea id="inputText" placeholder="Paste your text here..."></textarea>
+        <div class="row">
+          <button class="btn" id="btnDetectText">Detect</button>
+          <span class="muted">Minimum 20 characters.</span>
+        </div>
+      </div>
+
+      <!-- FILE MODE -->
+      <div id="panel-file" class="hidden">
+        <div class="filebox">
+          <input id="fileInput" type="file" accept=".txt,.docx,.pdf" />
+          <div class="muted" style="margin-top:6px;">Accepted: .txt, .docx, .pdf (max a few MB)</div>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnDetectFile">Detect</button>
+          <span class="muted">We’ll extract text on the server.</span>
+        </div>
+      </div>
+
+      <div id="status" class="muted" style="margin-top:12px;"></div>
+
+      <div id="result" class="result hidden">
+        <div id="labelLine">Label: <strong id="label">—</strong></div>
+        <div class="muted" style="margin-top:4px;">Probability (AI): <span id="prob">—</span></div>
+        <div class="bar"><div id="probBar"></div></div>
+        <div class="muted" style="margin-top:8px;">Details: <span id="details">—</span></div>
+      </div>
+
+      <div class="footer">Tip: For production, restrict CORS and add auth/rate limits.</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+
+    const el = (id) => document.getElementById(id);
+    const tabText = el("tab-text");
+    const tabFile = el("tab-file");
+    const panelText = el("panel-text");
+    const panelFile = el("panel-file");
+    const btnDetectText = el("btnDetectText");
+    const btnDetectFile = el("btnDetectFile");
+    const inputText = el("inputText");
+    const fileInput = el("fileInput");
+    const status = el("status");
+    const result = el("result");
+    const labelEl = el("label");
+    const probEl  = el("prob");
+    const probBar = el("probBar");
+    const details = el("details");
+
+    function setActive(tab) {
+      if (tab === "text") {
+        tabText.classList.add("active"); tabFile.classList.remove("active");
+        panelText.classList.remove("hidden"); panelFile.classList.add("hidden");
+      } else {
+        tabFile.classList.add("active"); tabText.classList.remove("active");
+        panelFile.classList.remove("hidden"); panelText.classList.add("hidden");
+      }
+      result.classList.add("hidden");
+      status.textContent = "";
+    }
+
+    tabText.addEventListener("click", () => setActive("text"));
+    tabFile.addEventListener("click", () => setActive("file"));
+
+    function showResult(payload) {
+      const { label, prob_ai, chars, filename } = payload;
+      labelEl.textContent = label;
+      probEl.textContent = prob_ai.toFixed(3);
+      probBar.style.width = (prob_ai * 100).toFixed(1) + "%";
+      details.textContent = (filename ? `file="${filename}", ` : "") + `length=${chars} chars`;
+      result.classList.remove("hidden");
+    }
+
+    async function detectText() {
+      const text = (inputText.value || "").trim();
+      if (text.length < 20) {
+        status.innerHTML = "<span class='error'>Text too short (≥20 chars).</span>";
+        return;
+      }
+      status.textContent = "Detecting…";
+      btnDetectText.disabled = true;
+      try {
+        const resp = await fetch(`${API_BASE}/predict-text`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Request failed");
+        showResult(data);
+        status.textContent = "Done.";
+      } catch (err) {
+        status.innerHTML = `<span class='error'>${err.message}</span>`;
+        result.classList.add("hidden");
+      } finally {
+        btnDetectText.disabled = false;
+      }
+    }
+
+    async function detectFile() {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        status.innerHTML = "<span class='error'>Please choose a file.</span>";
+        return;
+      }
+      status.textContent = "Uploading & detecting…";
+      btnDetectFile.disabled = true;
+
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const resp = await fetch(`${API_BASE}/predict-file`, {
+          method: "POST",
+          body: fd,
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Request failed");
+        showResult(data);
+        status.textContent = "Done.";
+      } catch (err) {
+        status.innerHTML = `<span class='error'>${err.message}</span>`;
+        result.classList.add("hidden");
+      } finally {
+        btnDetectFile.disabled = false;
+      }
+    }
+
+    btnDetectText.addEventListener("click", detectText);
+    btnDetectFile.addEventListener("click", detectFile);
+  </script>
+</body>
+</html>
